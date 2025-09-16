@@ -1,7 +1,5 @@
 # Problème 12 du chapitre 1
 
-using Plots
-
 function jeu_craps()  # fonction pour faire le jeu craps
     de1 = rand(1:6)
     de2 = rand(1:6)
