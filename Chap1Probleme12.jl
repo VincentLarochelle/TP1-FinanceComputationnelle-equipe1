@@ -58,4 +58,4 @@ affichage = ["WIN", "LOSE"]
 donnees = [victoires, defaites]
 
 bar(affichage, donnees, title = "Résultats de la simulation pour le jeu de Craps",
-    xlabel = "Résultat", ylabel = "Nombre de parties")
+    xlabel = "Résultat", ylabel = "Nombre de parties")   

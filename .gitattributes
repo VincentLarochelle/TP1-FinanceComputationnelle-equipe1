@@ -1,4 +1,0 @@
-# Auto detect text files and perform LF normalization
-* text=auto
-Test2 = ("savoir quel fichier utilisé, en ce moment, gitattributes")
-print(Test2)
