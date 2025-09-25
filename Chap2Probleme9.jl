@@ -1,4 +1,4 @@
-# Problème 9 du chapitre 2
+# Problème 9 du chapitre 2 : Distribution du minimum
 
 using Plots
 using Statistics
@@ -17,129 +17,173 @@ function simuler_minimum_uniforme(N::Int, nombre_simulations::Int)
     return valeurs_minimum
 end
 
-# Fonction pour tracer l'histogramme et la distribution théorique
-function tracer_distribution_minimum(valeurs_minimum::Vector{Float64}, N::Int)
-    # Créer l'histogramme des valeurs minimum simulées
-    histogramme = histogram(valeurs_minimum, bins=30, alpha=0.7, 
-                           label="Simulation (N=$N)", 
-                           xlabel="Valeur du minimum", 
-                           ylabel="Densité de probabilité",
-                           title="Distribution du minimum de $N variables U(0,1)",
-                           normalize=:pdf)
+# Fonction pour tracer l'histogramme principal avec bandes visibles
+function tracer_histogramme_principal(valeurs_minimum::Vector{Float64}, N::Int)
+    # Créer l'histogramme avec des bandes bien visibles
+    histogramme = histogram(valeurs_minimum, bins=20, alpha=0.7, 
+                           label="Données simulées", 
+                           xlabel="Valeur du minimum Xi", 
+                           ylabel="Fréquence",
+                           title="Histogramme du minimum de $N variables U(0,1)",
+                           color=:lightblue,
+                           linewidth=2,
+                           linecolor=:black,
+                           legend=:topright)
     
-    # Ajouter la distribution théorique
-    t = range(0, 1, length=100)
-    densite_theorique = N .* (1 .- t).^(N-1)  # PDF théorique
-    plot!(histogramme, t, densite_theorique, linewidth=3, color=:red, 
-          label="Distribution théorique")
+    # Ajouter une ligne verticale pour la moyenne
+    moyenne_simulee = mean(valeurs_minimum)
+    vline!([moyenne_simulee], linewidth=3, color=:red, 
+           label="Moyenne simulée = $(round(moyenne_simulee, digits=4))")
+    
+    # Ajouter la moyenne théorique
+    moyenne_theorique = 1/(N+1)
+    vline!([moyenne_theorique], linewidth=3, color=:green, 
+           label="Moyenne théorique = $(round(moyenne_theorique, digits=4))")
     
     return histogramme
 end
 
-# Fonction pour étudier la dépendance par rapport à N
-function etudier_dependance_N(valeurs_N::Vector{Int}, nombre_simulations::Int=10000)
-    # Stocker les résultats pour chaque N
-    resultats = Dict{Int, Vector{Float64}}()
-    moyennes = Float64[]
-    ecarts_types = Float64[]
+# Fonction pour tracer l'histogramme avec comparaison théorique
+function tracer_histogramme_comparaison(valeurs_minimum::Vector{Float64}, N::Int)
+    # Créer l'histogramme normalisé avec bordures visibles
+    histogramme = histogram(valeurs_minimum, bins=25, alpha=0.6, 
+                           label="Histogramme simulé", 
+                           xlabel="t (valeur du minimum)", 
+                           ylabel="Densité de probabilité",
+                           title="Distribution du minimum de $N variables U(0,1)",
+                           normalize=:pdf,
+                           color=:lightblue,
+                           linewidth=1.5,
+                           linecolor=:darkblue)
     
-    for N in valeurs_N
-        println("Simulation pour N = $N...")
-        # Simuler les valeurs minimum
-        valeurs_min = simuler_minimum_uniforme(N, nombre_simulations)
-        resultats[N] = valeurs_min
-        
-        # Calculer les statistiques
-        push!(moyennes, mean(valeurs_min))
-        push!(ecarts_types, std(valeurs_min))
-        
-        # Afficher les résultats théoriques et simulés
-        moyenne_theorique = 1/(N+1)
-        println("N=$N: Moyenne simulée = $(round(mean(valeurs_min), digits=4)), " *
-                "Moyenne théorique = $(round(moyenne_theorique, digits=4))")
-    end
+    # Ajouter la distribution théorique
+    t = range(0, 1, length=200)
+    densite_theorique = N .* (1 .- t).^(N-1)  # PDF théorique
+    plot!(histogramme, t, densite_theorique, linewidth=3, color=:red, 
+          label="Théorique: f(t) = $N(1-t)^$(N-1)")
     
-    # Tracer l'évolution de la moyenne en fonction de N
-    graphique_moyennes = plot(valeurs_N, moyennes, marker=:circle, linewidth=2,
-                            xlabel="Nombre de variables (N)", 
-                            ylabel="Moyenne du minimum",
-                            title="Évolution de la moyenne du minimum en fonction de N",
-                            label="Moyennes simulées",
-                            legend=:topright)
-    
-    # Ajouter les valeurs théoriques
-    moyennes_theoriques = 1 ./ (valeurs_N .+ 1)
-    plot!(graphique_moyennes, valeurs_N, moyennes_theoriques, 
-          linewidth=2, color=:red, label="Moyennes théoriques")
-    
-    return resultats, graphique_moyennes, moyennes, ecarts_types
+    return histogramme
 end
 
-# Fonction pour calculer la fonction de répartition empirique
-function calculer_fonction_repartition(valeurs, t_values)
-    n = length(valeurs)
-    sorted_vals = sort(valeurs)
-    cdf_values = zeros(length(t_values))
+# Fonction pour créer un histogramme détaillé avec statistiques
+function histogramme_detaille(valeurs_minimum::Vector{Float64}, N::Int)
+    # Calcul des statistiques
+    moyenne_sim = mean(valeurs_minimum)
+    ecart_type = std(valeurs_minimum)
+    moyenne_theo = 1/(N+1)
     
-    for (i, t) in enumerate(t_values)
-        cdf_values[i] = count(x -> x <= t, valeurs) / n
+    # Créer l'histogramme avec bordures épaisses
+    p = histogram(valeurs_minimum, bins=30, 
+                 xlabel="Valeur du minimum", 
+                 ylabel="Densité de probabilité",
+                 title="Distribution du minimum de $N variables U(0,1)",
+                 normalize=:pdf,
+                 color=:skyblue,
+                 alpha=0.7,
+                 linewidth=2,
+                 linecolor=:navyblue,
+                 label="Données simulées")
+    
+    # Ajouter la courbe théorique
+    t = range(0, 1, length=200)
+    densite_theo = N .* (1 .- t).^(N-1)
+    plot!(p, t, densite_theo, linewidth=3, color=:crimson, 
+          label="Distribution théorique")
+    
+    # Ajouter les lignes verticales pour les moyennes
+    vline!(p, [moyenne_sim], linewidth=2, color=:red, linestyle=:dash, 
+           label="Moyenne simulée")
+    vline!(p, [moyenne_theo], linewidth=2, color=:green, linestyle=:dash, 
+           label="Moyenne théorique")
+    
+    # Ajouter une annotation avec les statistiques
+    annotate!(p, 0.6, maximum(densite_theo)*0.8, 
+              text("Moyenne simulée: $(round(moyenne_sim, digits=4))\nMoyenne théorique: $(round(moyenne_theo, digits=4))\nÉcart-type: $(round(ecart_type, digits=4))", 
+              :left, 10))
+    
+    return p
+end
+
+# Fonction pour les histogrammes multiples avec bandes bien visibles
+function histogrammes_pour_differents_N()
+    valeurs_N = [2, 5, 10, 20, 50]
+    nombre_simulations = 5000
+    
+    # Créer un tableau de graphiques
+    plots = []
+    
+    for N in valeurs_N
+        # Simuler les données
+        donnees = simuler_minimum_uniforme(N, nombre_simulations)
+        
+        # Créer l'histogramme pour ce N
+        p = histogram(donnees, bins=20, 
+                     title="N = $N",
+                     xlabel="Minimum Xi",
+                     ylabel="Densité",
+                     normalize=:pdf,
+                     color=Int(255/N*10),  # Variation de couleur
+                     alpha=0.7,
+                     linewidth=1.5,
+                     linecolor=:black,
+                     label=false)
+        
+        # Ajouter la courbe théorique
+        t = range(0, 1, length=100)
+        densite_theo = N .* (1 .- t).^(N-1)
+        plot!(p, t, densite_theo, linewidth=2, color=:red, label="Théorique")
+        
+        push!(plots, p)
     end
     
-    return cdf_values
+    # Combiner tous les graphiques
+    plot_final = plot(plots..., layout=(length(valeurs_N), 1), 
+                     size=(800, 1000),
+                     plot_title="Évolution de la distribution du minimum avec N")
+    
+    return plot_final
 end
 
 # Fonction principale
-function main()
-    # Paramètres initiaux
-    N_initial = 10
+function probleme9_corrige()
+    # Paramètres
+    N = 10
     nombre_simulations = 10000
     
-    println("=== Étude de la distribution du minimum ===")
-    println("Paramètres: N = $N_initial, Nombre de simulations = $nombre_simulations")
+    println("="^60)
+    println("PROBLÈME 9 - DISTRIBUTION DU MINIMUM")
+    println("="^60)
     
-    # Simulation pour N = 10
-    valeurs_minimum = simuler_minimum_uniforme(N_initial, nombre_simulations)
+    # Simulation
+    println("Simulation en cours...")
+    donnees = simuler_minimum_uniforme(N, nombre_simulations)
     
-    # Statistiques descriptives
-    println("\n--- Résultats pour N = $N_initial ---")
-    println("Moyenne = $(round(mean(valeurs_minimum), digits=4))")
-    println("Écart-type = $(round(std(valeurs_minimum), digits=4))")
-    println("Minimum observé = $(round(minimum(valeurs_minimum), digits=4))")
-    println("Maximum observé = $(round(maximum(valeurs_minimum), digits=4))")
-    println("Moyenne théorique = $(round(1/(N_initial+1), digits=4))")
+    # Graphique 1: Histogramme principal avec bandes
+    println("Génération de l'histogramme principal...")
+    histo1 = tracer_histogramme_principal(donnees, N)
+    display(histo1)
     
-    # Tracer la distribution
-    graphique = tracer_distribution_minimum(valeurs_minimum, N_initial)
-    display(graphique)
+    # Graphique 2: Comparaison avec théorie
+    println("Génération de l'histogramme de comparaison...")
+    histo2 = tracer_histogramme_comparaison(donnees, N)
+    display(histo2)
     
-    # Tracer aussi la fonction de répartition
-    t_values = range(0, 1, length=100)
-    cdf_empirique = calculer_fonction_repartition(valeurs_minimum, t_values)
-    cdf_theorique = 1 .- (1 .- t_values).^N_initial
+    # Graphique 3: Histogramme détaillé
+    println("Génération de l'histogramme détaillé...")
+    histo3 = histogramme_detaille(donnees, N)
+    display(histo3)
     
-    graphique_cdf = plot(t_values, cdf_empirique, linewidth=2, label="Empirique",
-                        xlabel="t", ylabel="Pr(min Xi ≤ t)",
-                        title="Fonction de répartition pour N=$N_initial")
-    plot!(graphique_cdf, t_values, cdf_theorique, linewidth=2, color=:red, 
-          label="Théorique: 1-(1-t)^N")
-    display(graphique_cdf)
+    # Graphique 4: Histogrammes multiples pour différents N
+    println("Génération des histogrammes multiples...")
+    histo4 = histogrammes_pour_differents_N()
+    display(histo4)
     
-    # Étudier la dépendance par rapport à N
-    println("\n=== Étude de la dépendance par rapport à N ===")
-    valeurs_N = [2, 5, 10, 20, 50, 100]
-    resultats, graphique_moyennes, moyennes, ecarts_types = etudier_dependance_N(valeurs_N, 5000)
-    
-    display(graphique_moyennes)
-    
-    # Afficher un résumé
-    println("\n=== Résumé ===")
-    println("Le minimum de N variables uniformes U(0,1) :")
-    println("- Tend vers 0 lorsque N augmente")
-    println("- Sa variabilité diminue lorsque N augmente")
-    println("- Sa distribution devient de plus en plus concentrée près de 0")
-    println("- La moyenne théorique est E[min] = 1/(N+1)")
-    println("- La fonction de répartition est Pr(min Xi ≤ t) = 1 - (1 - t)^N")
+    # Statistiques
+    println("\nSTATISTIQUES POUR N = $N:")
+    println("Moyenne simulée: $(round(mean(donnees), digits=6))")
+    println("Moyenne théorique: $(round(1/(N+1), digits=6))")
+    println("Écart-type: $(round(std(donnees), digits=6))")
 end
 
 # Exécuter le programme
-main()
+probleme9_corrige()
