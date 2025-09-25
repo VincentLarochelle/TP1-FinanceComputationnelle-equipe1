@@ -1,8 +1,9 @@
-# Problème 16 du chapitre 2
+# Problème 16 du chapitre 2 : Comparaison équiprobable vs conditionnellement équiprobable
 
 using Plots
 using Statistics
 using Random
+using SpecialFunctions 
 
 # Fonction pour générer des points uniformes et calculer les distances inter-points
 function distances_uniformes(n::Int, nb_simulations::Int)
@@ -26,8 +27,8 @@ end
 # Fonction pour générer des temps exponentiels conditionnés à avoir exactement n événements dans [0,1]
 function distances_exponentielles_conditionnees(λ::Float64, n::Int, nb_simulations::Int)
     toutes_distances = Float64[]
-    taux_rejet = 0.0
     total_tentatives = 0
+    total_acceptations = 0
     
     for _ in 1:nb_simulations
         accepte = false
@@ -54,54 +55,39 @@ function distances_exponentielles_conditionnees(λ::Float64, n::Int, nb_simulati
             # Vérifier si on a exactement n événements
             if length(temps) == n
                 accepte = true
+                total_acceptations += 1
                 # Ajouter les distances à la liste
                 for dist in temps
                     push!(toutes_distances, dist)
                 end
             end
         end
-        
-        taux_rejet += (tentatives - 1) / tentatives
     end
     
-    taux_rejet_moyen = taux_rejet / nb_simulations
-    return toutes_distances, taux_rejet_moyen, total_tentatives
+    rejets_par_acceptation = (total_tentatives - total_acceptations) / total_acceptations
+    
+    return toutes_distances, total_tentatives, rejets_par_acceptation
 end
 
 # Méthode alternative plus efficace utilisant la propriété des processus de Poisson
-function distances_exponentielles_efficace(λ::Float64, n::Int, nb_simulations::Int)
+function distances_exponentielles_efficace(n::Int, nb_simulations::Int)
     toutes_distances = Float64[]
     
     for _ in 1:nb_simulations
         # Générer n+1 points uniformes dans [0,1] et les trier
         points_uniformes = rand(n + 1)
-        # Trier manuellement (au lieu d'utiliser sort)
-        for i in 1:n
-            for j in i+1:n+1
-                if points_uniformes[i] > points_uniformes[j]
-                    # Échanger les valeurs
-                    temp = points_uniformes[i]
-                    points_uniformes[i] = points_uniformes[j]
-                    points_uniformes[j] = temp
-                end
-            end
-        end
+        # Trier les points
+        points_tries = sort(points_uniformes)
         
         # Calculer les écarts entre points consécutifs
         ecarts = Float64[]
-        somme_ecarts = 0.0
         for i in 1:n
-            ecart = points_uniformes[i+1] - points_uniformes[i]
+            ecart = points_tries[i+1] - points_tries[i]
             push!(ecarts, ecart)
-            somme_ecarts += ecart
         end
         
-        # Normaliser pour que la somme soit 1
-        for i in 1:length(ecarts)
-            ecarts[i] = ecarts[i] / somme_ecarts
-        end
-        
-        # Ajouter les distances
+        # Les écarts suivent une distribution Dirichlet(1,1,...,1)
+        # et représentent les temps inter-arrivées conditionnés
         for dist in ecarts
             push!(toutes_distances, dist)
         end
@@ -110,138 +96,228 @@ function distances_exponentielles_efficace(λ::Float64, n::Int, nb_simulations::
     return toutes_distances
 end
 
-# Fonction pour calculer la moyenne manuellement
-function calculer_moyenne(valeurs)
-    if length(valeurs) == 0
-        return 0.0
-    end
-    return sum(valeurs) / length(valeurs)
+# Fonction pour calculer la probabilité théorique d'avoir exactement n événements
+function calculer_probabilite_theorique(λ::Float64, n::Int)
+    # Pour un processus de Poisson: P(N=n) = (λ^n * e^{-λ}) / n!
+    # Calcul en log pour éviter les overflow
+    log_prob = n * log(λ) - λ - loggamma(n + 1)
+    return exp(log_prob)
 end
 
-# Fonction pour calculer l'écart-type manuellement
-function calculer_ecart_type(valeurs)
-    if length(valeurs) <= 1
-        return 0.0
-    end
-    moyenne = calculer_moyenne(valeurs)
-    somme_carres = 0.0
-    for val in valeurs
-        somme_carres += (val - moyenne)^2
-    end
-    return sqrt(somme_carres / (length(valeurs) - 1))
-end
-
-# Fonction pour comparer les deux distributions
-function comparer_distributions(n::Int, λ::Float64, nb_simulations::Int)
-    println("=== Comparaison des distributions ===")
-    println("Nombre d'événements: n = $n")
-    println("Paramètre exponentiel: λ = $λ")
-    println("Nombre de simulations: $nb_simulations")
+# Fonction pour créer un VRAI histogramme avec bandes
+function creer_vrai_histogramme(distances, titre, couleur)
+    # Calcul manuel des bins pour avoir un vrai histogramme
+    nb_bins = 30
+    min_val = minimum(distances)
+    max_val = maximum(distances)
+    bin_width = (max_val - min_val) / nb_bins
+    bins = range(min_val, stop=max_val, length=nb_bins+1)
     
-    # Distribution uniforme
-    println("\n1. Génération des points uniformes...")
+    # Calcul manuel des fréquences
+    counts = zeros(Int, nb_bins)
+    for d in distances
+        bin_index = min(floor(Int, (d - min_val) / bin_width) + 1, nb_bins)
+        counts[bin_index] += 1
+    end
+    
+    # Normalisation pour avoir une densité de probabilité
+    total = length(distances)
+    densities = counts ./ (total * bin_width)
+    
+    # Création de l'histogramme avec barres
+    bin_centers = [min_val + (i-0.5)*bin_width for i in 1:nb_bins]
+    
+    bar(bin_centers, densities, 
+        bar_width=bin_width*0.8,  # Légèrement plus étroit pour voir les séparations
+        alpha=0.7,
+        xlabel="Distance inter-événements", 
+        ylabel="Densité de probabilité",
+        title=titre,
+        color=couleur,
+        linewidth=1,
+        linecolor=:black,
+        label="",
+        legend=false,
+        grid=true)
+end
+
+# Fonction pour créer un histogramme avec l'option qui force les barres
+function creer_histogramme_barres(distances, titre, couleur)
+    histogram(distances, bins=:scott,  # Méthode de Scott pour le nombre de bins
+             bar_position=:overlay,
+             fill=true,
+             alpha=0.7,
+             xlabel="Distance inter-événements", 
+             ylabel="Densité de probabilité",
+             title=titre,
+             color=couleur,
+             linewidth=2,
+             linecolor=:black,
+             label="",
+             normalize=:pdf,
+             legend=false,
+             grid=true,
+             seriestype=:bar)  # FORCER le type barre
+end
+
+# Fonction pour créer un histogramme avec bins fixes
+function creer_histogramme_bins_fixes(distances, titre, couleur)
+    # Bins fixes bien définis
+    nb_bins = 25
+    min_val = 0.0
+    max_val = maximum(distances) * 1.1
+    
+    histogram(distances, 
+             bins=range(min_val, stop=max_val, length=nb_bins),
+             fill=true,
+             alpha=0.7,
+             xlabel="Distance inter-événements", 
+             ylabel="Densité de probabilité",
+             title=titre,
+             color=couleur,
+             linewidth=1,
+             linecolor=:black,
+             label="",
+             normalize=:pdf,
+             legend=false,
+             grid=true)
+end
+
+# Fonction pour comparer avec superposition
+function comparer_superposition_bandes(distances_unif, distances_exp, distances_exp_eff, n::Int)
+    # Bins communs pour les trois distributions
+    max_val = max(maximum(distances_unif), maximum(distances_exp), maximum(distances_exp_eff))
+    bins = range(0, stop=max_val * 1.1, length=30)
+    
+    p = histogram(distances_unif, bins=bins, 
+                  fill=true,
+                  alpha=0.6,
+                  label="Points uniformes",
+                  xlabel="Distance inter-événements", 
+                  ylabel="Densité de probabilité",
+                  title="Comparaison des distributions (n=$n)",
+                  color=:blue,
+                  linewidth=1,
+                  linecolor=:darkblue,
+                  normalize=:pdf,
+                  legend=:topright,
+                  grid=true)
+    
+    histogram!(p, distances_exp, bins=bins,
+               fill=true,
+               alpha=0.6,
+               label="Exponentiel (rejet)",
+               color=:green,
+               linewidth=1,
+               linecolor=:darkgreen)
+    
+    histogram!(p, distances_exp_eff, bins=bins,
+               fill=true,
+               alpha=0.6,
+               label="Exponentiel (efficace)",
+               color=:red,
+               linewidth=1,
+               linecolor=:darkred)
+    
+    return p
+end
+
+# Fonction principale
+function comparer_distributions_vraies_bandes(n::Int, λ::Float64, nb_simulations::Int)
+    println("="^70)
+    println("COMPARAISON AVEC VRAIS HISTOGRAMMES À BANDES")
+    println("="^70)
+    
+    # Génération des données
+    println("Génération des points uniformes...")
     distances_unif = distances_uniformes(n, nb_simulations)
     
-    # Distribution exponentielle conditionnée (méthode par rejet)
-    println("2. Génération des temps exponentiels conditionnés (méthode rejet)...")
-    distances_exp, taux_rejet, total_tentatives = distances_exponentielles_conditionnees(λ, n, nb_simulations)
+    println("Génération des temps exponentiels conditionnés (méthode rejet)...")
+    distances_exp, total_tentatives, rejets_par_acceptation = distances_exponentielles_conditionnees(λ, n, nb_simulations)
     
-    println("   Taux de rejet: $(round(taux_rejet * 100, digits=2))%")
-    println("   Tentatives totales: $total_tentatives")
-    println("   Efficacité: $(round(nb_simulations/total_tentatives * 100, digits=2))%")
+    println("Génération des temps exponentiels conditionnés (méthode efficace)...")
+    distances_exp_eff = distances_exponentielles_efficace(n, nb_simulations)
     
-    # Distribution exponentielle conditionnée (méthode efficace)
-    println("3. Génération des temps exponentiels conditionnés (méthode efficace)...")
-    distances_exp_eff = distances_exponentielles_efficace(λ, n, nb_simulations)
+    # ===== HISTOGRAMMES AVEC DE VRAIES BANDES =====
     
-    # Statistiques descriptives
-    println("\n=== Statistiques descriptives ===")
-    println("Uniforme - Moyenne: $(round(calculer_moyenne(distances_unif), digits=6)), Écart-type: $(round(calculer_ecart_type(distances_unif), digits=6))")
-    println("Exponentiel (rejet) - Moyenne: $(round(calculer_moyenne(distances_exp), digits=6)), Écart-type: $(round(calculer_ecart_type(distances_exp), digits=6))")
-    println("Exponentiel (efficace) - Moyenne: $(round(calculer_moyenne(distances_exp_eff), digits=6)), Écart-type: $(round(calculer_ecart_type(distances_exp_eff), digits=6))")
-    println("Théorique - Moyenne attendue: $(round(1/n, digits=6))")
+    # Méthode 1: Histogramme avec bins fixes
+    p1 = creer_histogramme_bins_fixes(distances_unif, "Points uniformes (n=$n)", :lightblue)
+    p2 = creer_histogramme_bins_fixes(distances_exp, "Exponentiel - Rejet (n=$n)", :lightgreen)
+    p3 = creer_histogramme_bins_fixes(distances_exp_eff, "Exponentiel - Efficace (n=$n)", :lightcoral)
     
-    # Tracer les histogrammes comparatifs
-    p1 = histogram(distances_unif, bins=50, alpha=0.6, label="Points uniformes", 
-                  xlabel="Distance inter-événements", ylabel="Densité",
-                  title="Distribution des distances (n=$n)", normalize=:pdf)
+    # Méthode 2: Superposition
+    p4 = comparer_superposition_bandes(distances_unif, distances_exp, distances_exp_eff, n)
     
-    histogram!(p1, distances_exp, bins=50, alpha=0.6, label="Exponentiel conditionné (rejet)")
-    histogram!(p1, distances_exp_eff, bins=50, alpha=0.6, label="Exponentiel conditionné (efficace)")
-    
-    # Tracer la distribution théorique exponentielle
-    max_val = maximum([maximum(distances_unif), maximum(distances_exp), maximum(distances_exp_eff)])
-    x = range(0, max_val, length=100)
-    densite_exp = λ * exp.(-λ * x)
-    plot!(p1, x, densite_exp, linewidth=2, color=:black, label="Exponentielle théorique E($λ)")
-    
-    # Tracer les fonctions de répartition
-    p2 = plot(xlabel="Distance", ylabel="Probabilité cumulée", 
-             title="Fonctions de répartition comparées")
-    
-    # CDF empirique pour points uniformes
-    sorted_unif = sort(distances_unif)
-    ecdf_unif = [i/length(sorted_unif) for i in 1:length(sorted_unif)]
-    plot!(p2, sorted_unif, ecdf_unif, label="Points uniformes", linewidth=2)
-    
-    # CDF empirique pour exponentiel conditionné
-    sorted_exp = sort(distances_exp)
-    ecdf_exp = [i/length(sorted_exp) for i in 1:length(sorted_exp)]
-    plot!(p2, sorted_exp, ecdf_exp, label="Exponentiel conditionné", linewidth=2)
-    
-    # CDF théorique exponentielle
-    cdf_theorique = 1 .- exp.(-λ * x)
-    plot!(p2, x, cdf_theorique, label="Exponentielle théorique", linewidth=2, color=:black)
+    # Méthode 3: Histogramme avec type barre forcé
+    p5 = creer_histogramme_barres(distances_unif, "Points uniformes - Barres (n=$n)", :blue)
+    p6 = creer_histogramme_barres(distances_exp, "Exponentiel - Barres (n=$n)", :green)
     
     # Afficher les graphiques
-    plot(p1, p2, layout=(2,1), size=(800,600))
+    println("\nAffichage des histogrammes...")
+    display(plot(p1, p2, p3, p4, layout=(2,2), size=(1200, 800)))
+    display(plot(p5, p6, layout=(1,2), size=(1000, 400)))
+    
+    # ===== STATISTIQUES =====
+    println("\nSTATISTIQUES:")
+    println("Uniforme - Moyenne: $(round(mean(distances_unif), digits=6))")
+    println("Exponentiel (rejet) - Moyenne: $(round(mean(distances_exp), digits=6))")
+    println("Exponentiel (efficace) - Moyenne: $(round(mean(distances_exp_eff), digits=6))")
+    println("Théorique - Moyenne attendue: $(round(1/n, digits=6))")
+    
+    # ===== RÉPONSES =====
+    println("\nRÉPONSES AUX QUESTIONS:")
+    proba_theorique = calculer_probabilite_theorique(λ, n)
+    println("1. Inefficacité méthode rejet:")
+    println("   • P(N=$n) = $(round(proba_theorique, digits=8))")
+    println("   • Rejets/acceptation: $(round(rejets_par_acceptation, digits=1))")
+    println("   • Efficacité: $(round(nb_simulations/total_tentatives * 100, digits=2))%")
+    
+    println("2. Méthode alternative efficace basée sur propriété Dirichlet")
     
     return distances_unif, distances_exp, distances_exp_eff
 end
 
-# Fonction pour analyser la dépendance au paramètre λ
-function analyser_dependance_λ(n::Int, nb_simulations::Int)
-    λ_values = [10.0, 30.0, 50.0, 70.0, 100.0]
-    taux_rejet = Float64[]
+# Fonction pour tester différents backends de plot
+function tester_backends()
+    println("Test des différents backends pour les histogrammes...")
     
-    for λ in λ_values
-        println("\nAnalyse pour λ = $λ")
-        _, taux, _ = distances_exponentielles_conditionnees(λ, n, min(100, nb_simulations))
-        push!(taux_rejet, taux)
-        println("Taux de rejet: $(round(taux * 100, digits=2))%")
+    # Essayer différents backends
+    backends = [:gr, :pyplot, :plotlyjs]
+    
+    for backend in backends
+        try
+            Plots.gr()  # Utiliser GR par défaut, bon pour les histogrammes
+            println("Backend GR activé")
+            break
+        catch e
+            println("Backend $backend non disponible: $e")
+        end
     end
-    
-    plot(λ_values, taux_rejet, marker=:circle, linewidth=2,
-         xlabel="Paramètre λ", ylabel="Taux de rejet",
-         title="Efficacité de la méthode par rejet en fonction de λ (n=$n)",
-         label="Taux de rejet")
 end
 
 # Fonction principale
-function main()
+function probleme16_vraies_bandes()
     # Paramètres
     n = 50
-    λ = 50.0  # Paramètre pour avoir en moyenne 50 événements dans [0,1]
+    λ = 50.0
     nb_simulations = 1000
     
+    println("PROBLÈME 16 - VRAIS HISTOGRAMMES À BANDES")
+    println("="^70)
+    
+    # Tester les backends
+    tester_backends()
+    
     # Comparer les distributions
-    distances_unif, distances_exp, distances_exp_eff = comparer_distributions(n, λ, nb_simulations)
+    comparer_distributions_vraies_bandes(n, λ, nb_simulations)
     
-    # Analyser la dépendance au paramètre λ
-    analyser_dependance_λ(n, nb_simulations)
-    
-    println("\n=== Conclusion ===")
-    println("Les points uniformément distribués donnent des distances inter-arrivées")
-    println("plus régulières, tandis que les processus exponentiels conditionnés")
-    println("conservent leur caractère aléatoire exponentiel même lorsqu'on")
-    println("conditionne sur le nombre total d'événements.")
-    println("\nLa méthode par rejet est très inefficace (taux de rejet élevé)")
-    println("car la probabilité d'avoir exactement n événements est faible.")
-    println("La méthode efficace utilise la propriété que les temps d'arrivée")
-    println("d'un processus de Poisson conditionné à avoir n événements dans [0,1]")
-    println("sont distribués comme les statistiques d'ordre de n variables uniformes.")
+    println("\n" * "="^70)
+    println("Si vous voyez toujours des courbes au lieu de bandes:")
+    println("1. Essayez d'ajouter l'argument `seriestype=:bar`")
+    println("2. Utilisez `bar()` au lieu de `histogram()`")
+    println("3. Vérifiez le backend de plotting (GR fonctionne bien)")
 end
 
-# Exécuter le programme
-Random.seed!(123)  # Pour la reproductibilité
-main()
+# Exécuter
+Random.seed!(123)
+probleme16_vraies_bandes()
