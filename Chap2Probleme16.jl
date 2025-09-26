@@ -104,43 +104,6 @@ function calculer_probabilite_theorique(λ::Float64, n::Int)
     return exp(log_prob)
 end
 
-# Fonction pour créer un VRAI histogramme avec bandes
-function creer_vrai_histogramme(distances, titre, couleur)
-    # Calcul manuel des bins pour avoir un vrai histogramme
-    nb_bins = 30
-    min_val = minimum(distances)
-    max_val = maximum(distances)
-    bin_width = (max_val - min_val) / nb_bins
-    bins = range(min_val, stop=max_val, length=nb_bins+1)
-    
-    # Calcul manuel des fréquences
-    counts = zeros(Int, nb_bins)
-    for d in distances
-        bin_index = min(floor(Int, (d - min_val) / bin_width) + 1, nb_bins)
-        counts[bin_index] += 1
-    end
-    
-    # Normalisation pour avoir une densité de probabilité
-    total = length(distances)
-    densities = counts ./ (total * bin_width)
-    
-    # Création de l'histogramme avec barres
-    bin_centers = [min_val + (i-0.5)*bin_width for i in 1:nb_bins]
-    
-    bar(bin_centers, densities, 
-        bar_width=bin_width*0.8,  # Légèrement plus étroit pour voir les séparations
-        alpha=0.7,
-        xlabel="Distance inter-événements", 
-        ylabel="Densité de probabilité",
-        title=titre,
-        color=couleur,
-        linewidth=1,
-        linecolor=:black,
-        label="",
-        legend=false,
-        grid=true)
-end
-
 # Fonction pour créer un histogramme avec l'option qui force les barres
 function creer_histogramme_barres(distances, titre, couleur)
     histogram(distances, bins=:scott,  # Méthode de Scott pour le nombre de bins
@@ -160,102 +123,21 @@ function creer_histogramme_barres(distances, titre, couleur)
              seriestype=:bar)  # FORCER le type barre
 end
 
-# Fonction pour créer un histogramme avec bins fixes
-function creer_histogramme_bins_fixes(distances, titre, couleur)
-    # Bins fixes bien définis
-    nb_bins = 25
-    min_val = 0.0
-    max_val = maximum(distances) * 1.1
-    
-    histogram(distances, 
-             bins=range(min_val, stop=max_val, length=nb_bins),
-             fill=true,
-             alpha=0.7,
-             xlabel="Distance inter-événements", 
-             ylabel="Densité de probabilité",
-             title=titre,
-             color=couleur,
-             linewidth=1,
-             linecolor=:black,
-             label="",
-             normalize=:pdf,
-             legend=false,
-             grid=true)
-end
-
-# Fonction pour comparer avec superposition
-function comparer_superposition_bandes(distances_unif, distances_exp, distances_exp_eff, n::Int)
-    # Bins communs pour les trois distributions
-    max_val = max(maximum(distances_unif), maximum(distances_exp), maximum(distances_exp_eff))
-    bins = range(0, stop=max_val * 1.1, length=30)
-    
-    p = histogram(distances_unif, bins=bins, 
-                  fill=true,
-                  alpha=0.6,
-                  label="Points uniformes",
-                  xlabel="Distance inter-événements", 
-                  ylabel="Densité de probabilité",
-                  title="Comparaison des distributions (n=$n)",
-                  color=:blue,
-                  linewidth=1,
-                  linecolor=:darkblue,
-                  normalize=:pdf,
-                  legend=:topright,
-                  grid=true)
-    
-    histogram!(p, distances_exp, bins=bins,
-               fill=true,
-               alpha=0.6,
-               label="Exponentiel (rejet)",
-               color=:green,
-               linewidth=1,
-               linecolor=:darkgreen)
-    
-    histogram!(p, distances_exp_eff, bins=bins,
-               fill=true,
-               alpha=0.6,
-               label="Exponentiel (efficace)",
-               color=:red,
-               linewidth=1,
-               linecolor=:darkred)
-    
-    return p
-end
-
-# Fonction principale
+# Fonction pour comparer les distributions et afficher les résultats
 function comparer_distributions_vraies_bandes(n::Int, λ::Float64, nb_simulations::Int)
-    println("="^70)
-    println("COMPARAISON AVEC VRAIS HISTOGRAMMES À BANDES")
-    println("="^70)
     
     # Génération des données
-    println("Génération des points uniformes...")
     distances_unif = distances_uniformes(n, nb_simulations)
-    
-    println("Génération des temps exponentiels conditionnés (méthode rejet)...")
     distances_exp, total_tentatives, rejets_par_acceptation = distances_exponentielles_conditionnees(λ, n, nb_simulations)
-    
-    println("Génération des temps exponentiels conditionnés (méthode efficace)...")
     distances_exp_eff = distances_exponentielles_efficace(n, nb_simulations)
     
-    # ===== HISTOGRAMMES AVEC DE VRAIES BANDES =====
-    
-    # Méthode 1: Histogramme avec bins fixes
-    p1 = creer_histogramme_bins_fixes(distances_unif, "Points uniformes (n=$n)", :lightblue)
-    p2 = creer_histogramme_bins_fixes(distances_exp, "Exponentiel - Rejet (n=$n)", :lightgreen)
-    p3 = creer_histogramme_bins_fixes(distances_exp_eff, "Exponentiel - Efficace (n=$n)", :lightcoral)
-    
-    # Méthode 2: Superposition
-    p4 = comparer_superposition_bandes(distances_unif, distances_exp, distances_exp_eff, n)
-    
     # Méthode 3: Histogramme avec type barre forcé
-    p5 = creer_histogramme_barres(distances_unif, "Points uniformes - Barres (n=$n)", :blue)
-    p6 = creer_histogramme_barres(distances_exp, "Exponentiel - Barres (n=$n)", :green)
+    p1 = creer_histogramme_barres(distances_unif, "Points uniformes - Barres (n=$n)", :blue)
+    p2 = creer_histogramme_barres(distances_exp, "Exponentiel - Barres (n=$n)", :green)
     
     # Afficher les graphiques
-    println("\nAffichage des histogrammes...")
-    display(plot(p1, p2, p3, p4, layout=(2,2), size=(1200, 800)))
-    display(plot(p5, p6, layout=(1,2), size=(1000, 400)))
+
+    display(plot(p1, p2, layout=(1,2), size=(1000, 400)))
     
     # ===== STATISTIQUES =====
     println("\nSTATISTIQUES:")
@@ -264,30 +146,25 @@ function comparer_distributions_vraies_bandes(n::Int, λ::Float64, nb_simulation
     println("Exponentiel (efficace) - Moyenne: $(round(mean(distances_exp_eff), digits=6))")
     println("Théorique - Moyenne attendue: $(round(1/n, digits=6))")
     
-    # ===== RÉPONSES =====
-    println("\nRÉPONSES AUX QUESTIONS:")
+    # ===== RÉPONSE =====
     proba_theorique = calculer_probabilite_theorique(λ, n)
     println("1. Inefficacité méthode rejet:")
     println("   • P(N=$n) = $(round(proba_theorique, digits=8))")
     println("   • Rejets/acceptation: $(round(rejets_par_acceptation, digits=1))")
     println("   • Efficacité: $(round(nb_simulations/total_tentatives * 100, digits=2))%")
     
-    println("2. Méthode alternative efficace basée sur propriété Dirichlet")
-    
-    return distances_unif, distances_exp, distances_exp_eff
+    return nothing
 end
 
 # Fonction pour tester différents backends de plot
 function tester_backends()
-    println("Test des différents backends pour les histogrammes...")
     
     # Essayer différents backends
     backends = [:gr, :pyplot, :plotlyjs]
     
     for backend in backends
         try
-            Plots.gr()  # Utiliser GR par défaut, bon pour les histogrammes
-            println("Backend GR activé")
+            Plots.gr()  
             break
         catch e
             println("Backend $backend non disponible: $e")
@@ -302,20 +179,11 @@ function probleme16_vraies_bandes()
     λ = 50.0
     nb_simulations = 1000
     
-    println("PROBLÈME 16 - VRAIS HISTOGRAMMES À BANDES")
-    println("="^70)
-    
     # Tester les backends
     tester_backends()
     
     # Comparer les distributions
     comparer_distributions_vraies_bandes(n, λ, nb_simulations)
-    
-    println("\n" * "="^70)
-    println("Si vous voyez toujours des courbes au lieu de bandes:")
-    println("1. Essayez d'ajouter l'argument `seriestype=:bar`")
-    println("2. Utilisez `bar()` au lieu de `histogram()`")
-    println("3. Vérifiez le backend de plotting (GR fonctionne bien)")
 end
 
 # Exécuter
